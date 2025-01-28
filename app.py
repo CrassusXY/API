@@ -1,9 +1,13 @@
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
+from flask_socketio import SocketIO, emit
+import os
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret!'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Twój Team ID z nRF Cloud
-TEAM_ID = "9d162da3-172c-4189-b92c-cf557dc9f0c9"  # Zamień na swój rzeczywisty Team ID
+TEAM_ID = "9d162da3-172c-4189-b92c-cf557dc9f0c9"
 
 @app.route("/", methods=["GET"])
 def home():
@@ -22,17 +26,27 @@ def receive_data():
             if "appId" in sensor_data:
                 app_id = sensor_data["appId"]
                 value = sensor_data["data"]
-                print(f"Sensor {app_id} - Wartość: {value}")
+                # Emituj dane do aplikacji mobilnej przez WebSocket
+                emit('sensor_data', {"sensor": app_id, "value": value}, broadcast=True)
             elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
                 x, y, z = sensor_data["x"], sensor_data["y"], sensor_data["z"]
-                print(f"Akcelerometr - X: {x}, Y: {y}, Z: {z}")
+                # Emituj dane akcelerometru do aplikacji mobilnej
+                emit('imu_data', {"x": x, "y": y, "z": z}, broadcast=True)
 
     # Tworzenie odpowiedzi z nagłówkiem
-    response = make_response(jsonify({"status": "success"}), 200)
+    response = jsonify({"status": "success"})
     response.headers["x-nrfcloud-team-id"] = TEAM_ID
     return response
 
+@socketio.on('connect')
+def on_connect():
+    print('Client connected')
+    emit('message', {'message': 'Connected to WebSocket!'})
+
+@socketio.on('disconnect')
+def on_disconnect():
+    print('Client disconnected')
+
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))  # Dynamiczny port dla Render
-    app.run(host="0.0.0.0", port=port)
+    socketio.run(app, host="0.0.0.0", port=port)
