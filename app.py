@@ -31,7 +31,7 @@ def receive_data():
             if "appId" in sensor_data:
                 app_id = sensor_data["appId"]
                 value = sensor_data["data"]
-                socketio.emit('sensor_data', {"sensor": app_id, "value": value}, broadcast=True)
+                socketio.emit('sensor_data', {"sensor": app_id, "value": value})
 
             # Jeśli to dane z akcelerometru (przyjmiemy ten sam format dla gyro i mag)
             elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
@@ -54,7 +54,7 @@ def receive_data():
                         }
                     }
                 }
-                socketio.emit('imu_data', imu_data, broadcast=True)
+                socketio.emit('imu_data', imu_data)
 
             # Jeśli to dane GPS (latitude, longitude)
             elif "latitude" in sensor_data and "longitude" in sensor_data:
@@ -64,7 +64,7 @@ def receive_data():
                         "longitude": sensor_data["longitude"]
                     }
                 }
-                socketio.emit('gps_data', gps_data, broadcast=True)
+                socketio.emit('gps_data', gps_data)
 
     # Tworzenie odpowiedzi z nagłówkiem wymaganym przez nRF Cloud
     response = jsonify({"status": "success"})
