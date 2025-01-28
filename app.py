@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_socketio import SocketIO, emit
 import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Twój Team ID z nRF Cloud
 TEAM_ID = "9d162da3-172c-4189-b92c-cf557dc9f0c9"
@@ -23,17 +23,47 @@ def receive_data():
     if isinstance(data, dict) and "messages" in data:
         for message in data["messages"]:
             sensor_data = message.get("message", {})
+
+            # Jeśli to dane z czujników (np. TEMP, HUMID, AIR_PRESS)
             if "appId" in sensor_data:
                 app_id = sensor_data["appId"]
                 value = sensor_data["data"]
-                # Emituj dane do aplikacji mobilnej przez WebSocket
                 emit('sensor_data', {"sensor": app_id, "value": value}, broadcast=True)
-            elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
-                x, y, z = sensor_data["x"], sensor_data["y"], sensor_data["z"]
-                # Emituj dane akcelerometru do aplikacji mobilnej
-                emit('imu_data', {"x": x, "y": y, "z": z}, broadcast=True)
 
-    # Tworzenie odpowiedzi z nagłówkiem
+            # Jeśli to dane z akcelerometru (przyjmiemy ten sam format dla gyro i mag)
+            elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
+                imu_data = {
+                    "imu": {
+                        "acc": {
+                            "x": sensor_data["x"],
+                            "y": sensor_data["y"],
+                            "z": sensor_data["z"]
+                        },
+                        "gyro": {  # Gyro będzie miało te same wartości co acc
+                            "x": sensor_data["x"],
+                            "y": sensor_data["y"],
+                            "z": sensor_data["z"]
+                        },
+                        "mag": {  # Mag będzie miał te same wartości co acc
+                            "x": sensor_data["x"],
+                            "y": sensor_data["y"],
+                            "z": sensor_data["z"]
+                        }
+                    }
+                }
+                emit('imu_data', imu_data, broadcast=True)
+
+            # Jeśli to dane GPS (latitude, longitude)
+            elif "latitude" in sensor_data and "longitude" in sensor_data:
+                gps_data = {
+                    "location": {
+                        "latitude": sensor_data["latitude"],
+                        "longitude": sensor_data["longitude"]
+                    }
+                }
+                emit('gps_data', gps_data, broadcast=True)
+
+    # Tworzenie odpowiedzi z nagłówkiem wymaganym przez nRF Cloud
     response = jsonify({"status": "success"})
     response.headers["x-nrfcloud-team-id"] = TEAM_ID
     return response
