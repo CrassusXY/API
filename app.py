@@ -1,4 +1,7 @@
-from flask import Flask, request, jsonify, make_response
+import eventlet
+eventlet.monkey_patch()
+
+from flask import Flask, request, jsonify
 from flask_socketio import SocketIO, emit
 import os
 
@@ -28,7 +31,7 @@ def receive_data():
             if "appId" in sensor_data:
                 app_id = sensor_data["appId"]
                 value = sensor_data["data"]
-                emit('sensor_data', {"sensor": app_id, "value": value}, broadcast=True)
+                socketio.emit('sensor_data', {"sensor": app_id, "value": value}, broadcast=True)
 
             # Jeśli to dane z akcelerometru (przyjmiemy ten sam format dla gyro i mag)
             elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
@@ -51,7 +54,7 @@ def receive_data():
                         }
                     }
                 }
-                emit('imu_data', imu_data, broadcast=True)
+                socketio.emit('imu_data', imu_data, broadcast=True)
 
             # Jeśli to dane GPS (latitude, longitude)
             elif "latitude" in sensor_data and "longitude" in sensor_data:
@@ -61,7 +64,7 @@ def receive_data():
                         "longitude": sensor_data["longitude"]
                     }
                 }
-                emit('gps_data', gps_data, broadcast=True)
+                socketio.emit('gps_data', gps_data, broadcast=True)
 
     # Tworzenie odpowiedzi z nagłówkiem wymaganym przez nRF Cloud
     response = jsonify({"status": "success"})
