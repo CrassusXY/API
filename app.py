@@ -10,7 +10,7 @@ app.config['SECRET_KEY'] = 'secret!'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Twój Team ID z nRF Cloud
-TEAM_ID = "9d162da3-172c-4189-b92c-cf557dc9f0c9"
+TEAM_ID = "a896f37f-bd24-4382-8ad0-dff1ecbb3c95"
 
 @app.route("/", methods=["GET"])
 def home():
