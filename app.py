@@ -1,37 +1,17 @@
 from flask import Flask, request, jsonify
+from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import os
-import psycopg2
-from psycopg2.extras import Json
+import json
 
-# Załaduj zmienne środowiskowe z pliku .env
+# Wczytaj zmienne środowiskowe
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-TEAM_ID = os.getenv("TEAM_ID", "brak_teamu")
+TEAM_ID = "a896f37f-bd24-4382-8ad0-dff1ecbb3c95"
 
 app = Flask(__name__)
-
-def insert_message_to_db(data):
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS sensor_data (
-                id SERIAL PRIMARY KEY,
-                data JSONB NOT NULL,
-                received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-        """)
-
-        cur.execute("INSERT INTO sensor_data (data) VALUES (%s)", [Json(data)])
-        conn.commit()
-
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"[DB ERROR] {e}")
+engine = create_engine(DATABASE_URL)
 
 @app.route("/", methods=["GET"])
 def home():
@@ -39,15 +19,31 @@ def home():
 
 @app.route("/data", methods=["POST"])
 def receive_data():
-    data = request.get_json()
+    data = request.json
     print(f"Otrzymano dane: {data}")
 
-    if isinstance(data, dict):
-        insert_message_to_db(data)
+    # Zapisz całą wiadomość jako tekst
+    try:
+        with engine.connect() as conn:
+            query = text("INSERT INTO messages (raw_data) VALUES (:raw)")
+            conn.execute(query, {"raw": json.dumps(data)})
+            conn.commit()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
     response = jsonify({"status": "success"})
     response.headers["x-nrfcloud-team-id"] = TEAM_ID
     return response
+
+@app.route("/logs", methods=["GET"])
+def get_logs():
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT * FROM messages ORDER BY timestamp DESC LIMIT 100"))
+            logs = [dict(row) for row in result]
+        return jsonify(logs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
