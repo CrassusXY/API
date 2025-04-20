@@ -1,16 +1,37 @@
-import eventlet
-eventlet.monkey_patch()
-
 from flask import Flask, request, jsonify
-from flask_socketio import SocketIO, emit
+from dotenv import load_dotenv
 import os
+import psycopg2
+from psycopg2.extras import Json
+
+# Załaduj zmienne środowiskowe z pliku .env
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+TEAM_ID = os.getenv("TEAM_ID", "brak_teamu")
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
-# Twój Team ID z nRF Cloud
-TEAM_ID = "a896f37f-bd24-4382-8ad0-dff1ecbb3c95"
+def insert_message_to_db(data):
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sensor_data (
+                id SERIAL PRIMARY KEY,
+                data JSONB NOT NULL,
+                received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        cur.execute("INSERT INTO sensor_data (data) VALUES (%s)", [Json(data)])
+        conn.commit()
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[DB ERROR] {e}")
 
 @app.route("/", methods=["GET"])
 def home():
@@ -18,68 +39,16 @@ def home():
 
 @app.route("/data", methods=["POST"])
 def receive_data():
-    # Odbierz dane w formacie JSON
-    data = request.json
+    data = request.get_json()
     print(f"Otrzymano dane: {data}")
 
-    # Obsługa czujników
-    if isinstance(data, dict) and "messages" in data:
-        for message in data["messages"]:
-            sensor_data = message.get("message", {})
+    if isinstance(data, dict):
+        insert_message_to_db(data)
 
-            # Jeśli to dane z czujników (np. TEMP, HUMID, AIR_PRESS)
-            if "appId" in sensor_data:
-                app_id = sensor_data["appId"]
-                value = sensor_data["data"]
-                socketio.emit('sensor_data', {"sensor": app_id, "value": value})
-
-            # Jeśli to dane z akcelerometru (przyjmiemy ten sam format dla gyro i mag)
-            elif "x" in sensor_data and "y" in sensor_data and "z" in sensor_data:
-                imu_data = {
-                    "imu": {
-                        "acc": {
-                            "x": sensor_data["x"],
-                            "y": sensor_data["y"],
-                            "z": sensor_data["z"]
-                        },
-                        "gyro": {  # Gyro będzie miało te same wartości co acc
-                            "x": sensor_data["x"],
-                            "y": sensor_data["y"],
-                            "z": sensor_data["z"]
-                        },
-                        "mag": {  # Mag będzie miał te same wartości co acc
-                            "x": sensor_data["x"],
-                            "y": sensor_data["y"],
-                            "z": sensor_data["z"]
-                        }
-                    }
-                }
-                socketio.emit('imu_data', imu_data)
-
-            # Jeśli to dane GPS (latitude, longitude)
-            elif "latitude" in sensor_data and "longitude" in sensor_data:
-                gps_data = {
-                    "location": {
-                        "latitude": sensor_data["latitude"],
-                        "longitude": sensor_data["longitude"]
-                    }
-                }
-                socketio.emit('gps_data', gps_data)
-
-    # Tworzenie odpowiedzi z nagłówkiem wymaganym przez nRF Cloud
     response = jsonify({"status": "success"})
     response.headers["x-nrfcloud-team-id"] = TEAM_ID
     return response
 
-@socketio.on('connect')
-def on_connect():
-    print('Client connected')
-    emit('message', {'message': 'Connected to WebSocket!'})
-
-@socketio.on('disconnect')
-def on_disconnect():
-    print('Client disconnected')
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Dynamiczny port dla Render
-    socketio.run(app, host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
