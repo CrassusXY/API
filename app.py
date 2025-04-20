@@ -3,12 +3,15 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 import os
 import json
+from init_db import init_db_once
 
 # Wczytaj zmienne środowiskowe
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 TEAM_ID = "a896f37f-bd24-4382-8ad0-dff1ecbb3c95"
+
+init_db_once()
 
 app = Flask(__name__)
 engine = create_engine(DATABASE_URL)
